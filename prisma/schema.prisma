@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Exercise {
+  id               String          @id @default(cuid())
+  name             String
+  sets             Int
+  reps             Int
+  frequencyPerWeek Int
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  media            ExerciseMedia[]
+  logs             DailyLog[]
+}
+
+model ExerciseMedia {
+  id            String   @id @default(cuid())
+  exerciseId    String
+  exercise      Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  type          String   // 'image' | 'video'
+  url           String
+  thumbnailUrl  String?
+  title         String?
+  isAlternative Boolean  @default(false)
+  cachedAt      DateTime @default(now())
+}
+
+model DailyLog {
+  id            String   @id @default(cuid())
+  date          DateTime @db.Date
+  exerciseId    String
+  exercise      Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  setsCompleted Int      @default(0)
+  completed     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@unique([date, exerciseId])
+}
+
+model ReminderSettings {
+  id        String   @id @default(cuid())
+  email     String
+  time      String   @default("08:30") // HH:MM format
+  enabled   Boolean  @default(true)
+  timezone  String   @default("America/Los_Angeles")
+  updatedAt DateTime @updatedAt
+}
