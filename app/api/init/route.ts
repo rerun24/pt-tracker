@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { PrismaClient } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
   // Simple auth check using cron secret
@@ -10,10 +10,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  try {
-    // Try to create tables by running queries
-    // This will fail silently if tables already exist
+  // Create a fresh connection for this request
+  const prisma = new PrismaClient();
 
+  try {
+    // Connect explicitly
+    await prisma.$connect();
+
+    // Try to create tables by running queries
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "Exercise" (
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -22,7 +26,7 @@ export async function POST(request: NextRequest) {
         "reps" INTEGER NOT NULL,
         "frequencyPerWeek" INTEGER NOT NULL,
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" TIMESTAMP(3) NOT NULL
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
@@ -60,13 +64,15 @@ export async function POST(request: NextRequest) {
         "time" TEXT NOT NULL DEFAULT '08:30',
         "enabled" BOOLEAN NOT NULL DEFAULT true,
         "timezone" TEXT NOT NULL DEFAULT 'America/Los_Angeles',
-        "updatedAt" TIMESTAMP(3) NOT NULL
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
+    await prisma.$disconnect();
     return NextResponse.json({ success: true, message: 'Database initialized' });
   } catch (error) {
     console.error('Init error:', error);
+    await prisma.$disconnect();
     return NextResponse.json({
       error: 'Failed to initialize database',
       details: error instanceof Error ? error.message : 'Unknown error'
