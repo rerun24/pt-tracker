@@ -3,16 +3,19 @@ import { prisma } from '@/lib/db';
 import { searchYouTubeVideos } from '@/lib/youtube';
 import { searchUnsplashImages } from '@/lib/unsplash';
 
+type RouteContext = { params: Promise<{ id: string }> };
+
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: RouteContext
 ) {
   try {
+    const { id } = await context.params;
     const { searchParams } = new URL(request.url);
     const refresh = searchParams.get('refresh') === 'true';
 
     const exercise = await prisma.exercise.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: { media: true },
     });
 
@@ -37,14 +40,14 @@ export async function GET(
     // Delete old media if refreshing
     if (refresh && exercise.media.length > 0) {
       await prisma.exerciseMedia.deleteMany({
-        where: { exerciseId: params.id },
+        where: { exerciseId: id },
       });
     }
 
     // Save new media
     const mediaData = [
       ...videos.map((v) => ({
-        exerciseId: params.id,
+        exerciseId: id,
         type: 'video' as const,
         url: v.videoUrl,
         thumbnailUrl: v.thumbnailUrl,
@@ -52,7 +55,7 @@ export async function GET(
         isAlternative: false,
       })),
       ...images.map((i) => ({
-        exerciseId: params.id,
+        exerciseId: id,
         type: 'image' as const,
         url: i.url,
         thumbnailUrl: i.thumbnailUrl,
@@ -69,7 +72,7 @@ export async function GET(
 
     // Fetch and return the saved media
     const savedMedia = await prisma.exerciseMedia.findMany({
-      where: { exerciseId: params.id },
+      where: { exerciseId: id },
     });
 
     return NextResponse.json(savedMedia);
