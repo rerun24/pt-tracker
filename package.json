@@ -8,8 +8,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
-    "start": "next start",
-    "lint": "next lint"
+    "start": "node scripts/start.js",
+    "start:server": "next start",
+    "lint": "next lint",
+    "db:push": "prisma db push"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
