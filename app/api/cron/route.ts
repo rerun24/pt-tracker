@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { sendReminderEmail } from '@/lib/email';
 
+// Minimal JSON response helper to prevent "output too large" errors
+function jsonResponse(data: object, status = 200) {
+  return new NextResponse(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Verify cron secret
@@ -9,16 +17,19 @@ export async function POST(request: NextRequest) {
     const cronSecret = process.env.CRON_SECRET;
 
     if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return jsonResponse({ error: 'Unauthorized' }, 401);
     }
 
-    const settings = await prisma.reminderSettings.findFirst();
+    let settings;
+    try {
+      settings = await prisma.reminderSettings.findFirst();
+    } catch (dbError) {
+      // Database connection error - return minimal response
+      return jsonResponse({ success: false, error: 'db_error' }, 500);
+    }
 
     if (!settings || !settings.enabled || !settings.email) {
-      return NextResponse.json({
-        success: true,
-        message: 'Reminders disabled or email not configured',
-      });
+      return jsonResponse({ success: true, skipped: 'not_configured' });
     }
 
     // Check if current time matches configured time (within 5 minute window)
@@ -38,17 +49,19 @@ export async function POST(request: NextRequest) {
 
     // Only send if within 5 minutes of configured time
     if (diff > 5 && diff < 1435) {
-      return NextResponse.json({
-        success: true,
-        message: `Not time to send reminder. Current: ${currentHour}:${currentMinute}, Configured: ${settings.time}`,
-      });
+      return jsonResponse({ success: true, skipped: 'not_time' });
     }
 
     // Get today's exercises
+    let exercises;
+    try {
+      exercises = await prisma.exercise.findMany();
+    } catch (dbError) {
+      return jsonResponse({ success: false, error: 'db_error' }, 500);
+    }
+
     const today = new Date();
     const dayOfWeek = today.getDay();
-
-    const exercises = await prisma.exercise.findMany();
 
     const scheduledExercises = exercises.filter((exercise) => {
       if (exercise.frequencyPerWeek >= 7) return true;
@@ -61,24 +74,20 @@ export async function POST(request: NextRequest) {
     });
 
     if (scheduledExercises.length === 0) {
-      return NextResponse.json({
-        success: true,
-        message: 'No exercises scheduled for today',
-      });
+      return jsonResponse({ success: true, skipped: 'no_exercises' });
     }
 
-    const success = await sendReminderEmail(settings.email, scheduledExercises);
+    let emailSent = false;
+    try {
+      emailSent = await sendReminderEmail(settings.email, scheduledExercises);
+    } catch (emailError) {
+      return jsonResponse({ success: false, error: 'email_error' }, 500);
+    }
 
-    return NextResponse.json({
-      success,
-      message: success ? 'Reminder sent' : 'Failed to send reminder',
-    });
+    return jsonResponse({ success: emailSent, sent: emailSent });
   } catch (error) {
-    console.error('Cron error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    // Catch-all: return minimal error response
+    return jsonResponse({ success: false, error: 'unknown' }, 500);
   }
 }
 
