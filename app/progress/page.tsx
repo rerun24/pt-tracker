@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Card from '@/components/ui/Card';
 import ProgressChart from '@/components/ProgressChart';
+import { getLocalDateString } from '@/lib/date';
 
 interface ChartDataPoint {
   date: string;
@@ -37,7 +38,7 @@ export default function ProgressPage() {
     const fetchStats = async () => {
       setLoading(true);
       try {
-        const response = await fetch(`/api/stats?days=${days}`);
+        const response = await fetch(`/api/stats?days=${days}&today=${getLocalDateString()}`);
         if (response.ok) {
           const data = await response.json();
           setStats(data);

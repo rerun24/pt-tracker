@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import DailyChecklist from '@/components/DailyChecklist';
 import Button from '@/components/ui/Button';
+import { getLocalDateString, addDays } from '@/lib/date';
 
 interface ExerciseLog {
   exerciseId: string;
@@ -14,10 +15,7 @@ interface ExerciseLog {
 }
 
 export default function HomePage() {
-  const [date, setDate] = useState(() => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  });
+  const [date, setDate] = useState(() => getLocalDateString());
   const [exercises, setExercises] = useState<ExerciseLog[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -66,12 +64,10 @@ export default function HomePage() {
   };
 
   const goToDay = (offset: number) => {
-    const current = new Date(date);
-    current.setDate(current.getDate() + offset);
-    setDate(current.toISOString().split('T')[0]);
+    setDate(addDays(date, offset));
   };
 
-  const isToday = date === new Date().toISOString().split('T')[0];
+  const isToday = date === getLocalDateString();
 
   return (
     <div>
@@ -83,7 +79,7 @@ export default function HomePage() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => setDate(new Date().toISOString().split('T')[0])}
+            onClick={() => setDate(getLocalDateString())}
           >
             Today
           </Button>

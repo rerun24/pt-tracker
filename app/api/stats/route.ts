@@ -1,15 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
+// Parse YYYY-MM-DD string and return date at noon UTC
+function parseDateString(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+}
+
+// Format date to YYYY-MM-DD string
+function formatDateString(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Get day of week from YYYY-MM-DD string (0 = Sunday)
+function getDayOfWeek(dateStr: string): number {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day).getDay();
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const daysParam = searchParams.get('days') || '30';
     const days = parseInt(daysParam);
+    // Client sends their local "today" date
+    const todayParam = searchParams.get('today');
 
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+    let endDate: Date;
+    let todayStr: string;
+
+    if (todayParam) {
+      // Use client's local date
+      endDate = parseDateString(todayParam);
+      todayStr = todayParam;
+    } else {
+      // Fallback to server date (not ideal but backwards compatible)
+      endDate = new Date();
+      todayStr = formatDateString(endDate);
+    }
+
+    const startDate = new Date(endDate);
+    startDate.setUTCDate(startDate.getUTCDate() - days);
 
     // Get all logs in the date range
     const logs = await prisma.dailyLog.findMany({
@@ -33,9 +67,9 @@ export async function GET(request: NextRequest) {
     // Calculate daily completion rates
     const dailyStats: { [key: string]: { completed: number; total: number } } = {};
 
-    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-      const dateStr = d.toISOString().split('T')[0];
-      const dayOfWeek = d.getDay();
+    for (let d = new Date(startDate); d <= endDate; d.setUTCDate(d.getUTCDate() + 1)) {
+      const dateStr = formatDateString(d);
+      const dayOfWeek = getDayOfWeek(dateStr);
 
       // Count expected exercises for this day
       let expectedExercises = 0;
@@ -59,7 +93,7 @@ export async function GET(request: NextRequest) {
 
     // Fill in completed counts
     logs.forEach((log) => {
-      const dateStr = log.date.toISOString().split('T')[0];
+      const dateStr = formatDateString(log.date);
       if (dailyStats[dateStr] && log.completed) {
         dailyStats[dateStr].completed++;
       }
@@ -73,17 +107,16 @@ export async function GET(request: NextRequest) {
       total: stats.total,
     }));
 
-    // Calculate streak
+    // Calculate streak using client's today
     let currentStreak = 0;
-    const today = new Date().toISOString().split('T')[0];
 
     for (let i = chartData.length - 1; i >= 0; i--) {
       const dayData = chartData[i];
-      if (dayData.date > today) continue;
+      if (dayData.date > todayStr) continue;
 
       if (dayData.total > 0 && dayData.completed === dayData.total) {
         currentStreak++;
-      } else if (dayData.date < today) {
+      } else if (dayData.date < todayStr) {
         // Only break if it's a past day with incomplete exercises
         break;
       }

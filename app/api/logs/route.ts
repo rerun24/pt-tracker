@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
+// Parse YYYY-MM-DD string to get components without timezone conversion
+function parseDateString(dateStr: string): { date: Date; dayOfWeek: number } {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  // Create date at noon UTC to avoid any date boundary issues
+  const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  // Calculate day of week from the date components directly
+  const tempDate = new Date(year, month - 1, day);
+  const dayOfWeek = tempDate.getDay();
+  return { date, dayOfWeek };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -13,8 +24,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const date = new Date(dateStr);
-    const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
+    const { date, dayOfWeek } = parseDateString(dateStr);
 
     // Get all exercises
     const exercises = await prisma.exercise.findMany({
@@ -78,7 +88,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const dateObj = new Date(date);
+    const { date: dateObj } = parseDateString(date);
 
     const log = await prisma.dailyLog.upsert({
       where: {
